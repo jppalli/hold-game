@@ -14,10 +14,11 @@ class HoldSession extends StatefulWidget {
 }
 
 class _HoldSessionState extends State<HoldSession>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   final TensionDetector _tensionDetector = TensionDetector();
   Timer? _sessionTimer;
   late AnimationController _breathController;
+  late AnimationController _fadeController;
   
   double _tensionLevel = 0.0;
   int _remainingSeconds = 60;
@@ -28,8 +29,13 @@ class _HoldSessionState extends State<HoldSession>
     super.initState();
     _breathController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 3000),
+      duration: const Duration(milliseconds: 4000),
     )..repeat(reverse: true);
+    
+    _fadeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    )..forward();
     
     _startSession();
   }
@@ -48,7 +54,11 @@ class _HoldSessionState extends State<HoldSession>
   void _endSession() {
     _sessionTimer?.cancel();
     if (!kIsWeb) HapticFeedback.mediumImpact();
-    widget.onComplete();
+    
+    // Fade out before completing
+    _fadeController.reverse().then((_) {
+      widget.onComplete();
+    });
   }
 
   void _handlePanStart(DragStartDetails details) {
@@ -80,6 +90,7 @@ class _HoldSessionState extends State<HoldSession>
   void dispose() {
     _sessionTimer?.cancel();
     _breathController.dispose();
+    _fadeController.dispose();
     super.dispose();
   }
 
@@ -95,73 +106,100 @@ class _HoldSessionState extends State<HoldSession>
         width: size.width,
         height: size.height,
         color: Colors.black,
-        child: Stack(
-          children: [
-            Center(
-              child: AnimatedBuilder(
-                animation: _breathController,
-                builder: (context, child) {
-                  final breathScale = _touching
-                      ? 1.0
-                      : 1.0 + (_breathController.value * 0.1);
-                  
-                  final wobbleOffset = _tensionLevel > 0.3
-                      ? Offset(
-                          (DateTime.now().millisecond % 10 - 5) * _tensionLevel,
-                          (DateTime.now().millisecond % 8 - 4) * _tensionLevel,
-                        )
-                      : Offset.zero;
-                  
-                  return Transform.translate(
-                    offset: wobbleOffset,
-                    child: Transform.scale(
-                      scale: breathScale,
-                      child: Container(
-                        width: 150,
-                        height: 150,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: RadialGradient(
-                            colors: [
-                              Color.lerp(
-                                const Color(0xFF6B8CFF),
-                                const Color(0xFFFF6B8C),
-                                _tensionLevel,
-                              )!.withOpacity(0.9),
-                              Color.lerp(
-                                const Color(0xFF6B8CFF),
-                                const Color(0xFFFF6B8C),
-                                _tensionLevel,
-                              )!.withOpacity(0.1),
+        child: FadeTransition(
+          opacity: _fadeController,
+          child: Stack(
+            children: [
+              Center(
+                child: AnimatedBuilder(
+                  animation: Listenable.merge([_breathController, _fadeController]),
+                  builder: (context, child) {
+                    final breathScale = _touching
+                        ? 1.0
+                        : 1.0 + (_breathController.value * 0.08);
+                    
+                    final wobbleOffset = _tensionLevel > 0.3
+                        ? Offset(
+                            (DateTime.now().millisecond % 10 - 5) * _tensionLevel * 0.5,
+                            (DateTime.now().millisecond % 8 - 4) * _tensionLevel * 0.5,
+                          )
+                        : Offset.zero;
+                    
+                    final baseColor = Color.lerp(
+                      const Color(0xFF6B8CFF),
+                      const Color(0xFFFF6B8C),
+                      _tensionLevel,
+                    )!;
+                    
+                    return Transform.translate(
+                      offset: wobbleOffset,
+                      child: Transform.scale(
+                        scale: breathScale,
+                        child: Container(
+                          width: 180,
+                          height: 180,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: baseColor.withOpacity(0.4),
+                                blurRadius: 60 - (_tensionLevel * 20),
+                                spreadRadius: 10 - (_tensionLevel * 5),
+                              ),
+                              BoxShadow(
+                                color: baseColor.withOpacity(0.2),
+                                blurRadius: 100,
+                                spreadRadius: 20,
+                              ),
                             ],
-                            stops: [
-                              0.3 - (_tensionLevel * 0.2),
-                              1.0,
-                            ],
+                          ),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: RadialGradient(
+                                colors: [
+                                  baseColor.withOpacity(0.95),
+                                  baseColor.withOpacity(0.6),
+                                  baseColor.withOpacity(0.1),
+                                  Colors.transparent,
+                                ],
+                                stops: [
+                                  0.0,
+                                  0.4 - (_tensionLevel * 0.15),
+                                  0.7,
+                                  1.0,
+                                ],
+                              ),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  );
-                },
+                    );
+                  },
+                ),
               ),
-            ),
-            Positioned(
-              top: 60,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: Text(
-                  '$_remainingSeconds',
-                  style: TextStyle(
-                    fontSize: 24,
-                    color: Colors.white.withOpacity(0.3),
-                    fontWeight: FontWeight.w300,
+              Positioned(
+                top: 80,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: AnimatedOpacity(
+                    opacity: _touching ? 0.15 : 0.25,
+                    duration: const Duration(milliseconds: 300),
+                    child: Text(
+                      '$_remainingSeconds',
+                      style: const TextStyle(
+                        fontSize: 28,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w200,
+                        letterSpacing: 2,
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
