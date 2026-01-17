@@ -19,9 +19,11 @@ class _HoldSessionState extends State<HoldSession>
   Timer? _sessionTimer;
   late AnimationController _breathController;
   late AnimationController _fadeController;
+  late AnimationController _counterFlipController;
   
   double _tensionLevel = 0.0;
   int _remainingSeconds = 60;
+  int _previousSeconds = 60;
   bool _touching = false;
 
   @override
@@ -37,17 +39,28 @@ class _HoldSessionState extends State<HoldSession>
       duration: const Duration(milliseconds: 800),
     )..forward();
     
+    _counterFlipController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
+    
     _startSession();
   }
 
   void _startSession() {
+    // Start countdown immediately, then every second
     _sessionTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      setState(() {
-        _remainingSeconds--;
-        if (_remainingSeconds <= 0) {
-          _endSession();
-        }
-      });
+      if (_remainingSeconds > 0) {
+        setState(() {
+          _previousSeconds = _remainingSeconds;
+          _remainingSeconds--;
+        });
+        _counterFlipController.forward(from: 0.0);
+      }
+      if (_remainingSeconds <= 0) {
+        timer.cancel();
+        _endSession();
+      }
     });
   }
 
@@ -91,6 +104,7 @@ class _HoldSessionState extends State<HoldSession>
     _sessionTimer?.cancel();
     _breathController.dispose();
     _fadeController.dispose();
+    _counterFlipController.dispose();
     super.dispose();
   }
 
@@ -183,18 +197,38 @@ class _HoldSessionState extends State<HoldSession>
                 left: 0,
                 right: 0,
                 child: Center(
-                  child: AnimatedOpacity(
-                    opacity: _touching ? 0.15 : 0.25,
-                    duration: const Duration(milliseconds: 300),
-                    child: Text(
-                      '$_remainingSeconds',
-                      style: const TextStyle(
-                        fontSize: 28,
-                        color: Colors.white,
-                        fontWeight: FontWeight.w200,
-                        letterSpacing: 2,
-                      ),
-                    ),
+                  child: AnimatedBuilder(
+                    animation: _counterFlipController,
+                    builder: (context, child) {
+                      final flipValue = _counterFlipController.value;
+                      final isFirstHalf = flipValue < 0.5;
+                      final displayNumber = isFirstHalf ? _previousSeconds : _remainingSeconds;
+                      
+                      // Page flip effect: rotate and fade
+                      final rotation = flipValue * 3.14159; // 180 degrees in radians
+                      final opacity = isFirstHalf 
+                          ? (1.0 - (flipValue * 2)) * 0.25
+                          : ((flipValue - 0.5) * 2) * 0.25;
+                      
+                      return Transform(
+                        alignment: Alignment.center,
+                        transform: Matrix4.identity()
+                          ..setEntry(3, 2, 0.001) // perspective
+                          ..rotateX(rotation),
+                        child: Opacity(
+                          opacity: opacity.clamp(0.1, 0.25),
+                          child: Text(
+                            '$displayNumber',
+                            style: const TextStyle(
+                              fontSize: 32,
+                              color: Colors.white,
+                              fontWeight: FontWeight.w200,
+                              letterSpacing: 3,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
               ),
