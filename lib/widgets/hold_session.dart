@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../core/tension_detector.dart';
 
 class HoldSession extends StatefulWidget {
@@ -46,7 +47,7 @@ class _HoldSessionState extends State<HoldSession>
 
   void _endSession() {
     _sessionTimer?.cancel();
-    HapticFeedback.mediumImpact();
+    if (!kIsWeb) HapticFeedback.mediumImpact();
     widget.onComplete();
   }
 
@@ -63,7 +64,7 @@ class _HoldSessionState extends State<HoldSession>
     
     setState(() => _tensionLevel = tension);
     
-    if (tension > 0.5) {
+    if (!kIsWeb && tension > 0.5) {
       HapticFeedback.selectionClick();
     }
   }
